@@ -1,0 +1,29 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+
+# Data
+data/faces/*
+data/trainer.yml
+data/face_recognition.db
+
+# Logs
+logs/*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model files
+*.caffemodel
+*.prototxt
+
+# Environment
+.env
+venv/
+.venv/

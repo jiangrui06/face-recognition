@@ -1,0 +1,36 @@
+# 人脸识别打卡系统 - 配置文件
+app:
+  name: "人脸识别打卡系统"
+  version: "2.0.0"
+
+database:
+  path: "data/face_recognition.db"
+
+camera:
+  index: 0
+  width: 640
+  height: 480
+  fps: 30
+
+recognition:
+  confidence_threshold: 80
+  cooldown_seconds: 5
+  face_sample_count: 60
+  face_min_size: 80
+
+detector:
+  type: "haar"  # "haar" | "dnn"
+  dnn:
+    model_url: "https://raw.githubusercontent.com/opencv/opencv_3rdparty/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000_fp16.caffemodel"
+    config_url: "https://raw.githubusercontent.com/opencv/opencv/master/samples/dnn/face_detector/deploy.prototxt"
+
+logging:
+  level: "INFO"
+  file: "logs/app.log"
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  reload: false

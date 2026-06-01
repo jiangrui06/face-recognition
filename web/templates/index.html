@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}仪表盘 - 人脸识别打卡系统{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2>📊 系统仪表盘</h2>
+        <p class="text-muted">系统概览和考勤统计</p>
+    </div>
+</div>
+
+<!-- 统计卡片 -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card bg-primary text-white h-100">
+            <div class="card-body">
+                <div class="stat-icon">👥</div>
+                <h2 class="stat-number">{{ stats.total_employees }}</h2>
+                <div class="stat-label">总员工数</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card bg-success text-white h-100">
+            <div class="card-body">
+                <div class="stat-icon">✅</div>
+                <h2 class="stat-number">{{ stats.today_attendance }}</h2>
+                <div class="stat-label">今日打卡</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card bg-warning text-white h-100">
+            <div class="card-body">
+                <div class="stat-icon">📊</div>
+                <h2 class="stat-number">{{ stats.today_rate }}%</h2>
+                <div class="stat-label">出勤率</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card bg-info text-white h-100">
+            <div class="card-body">
+                <div class="stat-icon">📅</div>
+                <h2 class="stat-number">{{ stats.monthly_attendance }}</h2>
+                <div class="stat-label">本月打卡</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 今日打卡记录 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>📋 今日打卡记录</span>
+                <a href="/attendance" class="btn btn-sm btn-primary">实时画面</a>
+            </div>
+            <div class="card-body p-0">
+                {% if stats.recent_records %}
+                <table class="table table-striped table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>姓名</th>
+                            <th>时间</th>
+                            <th>置信度</th>
+                        </tr>
+                    </thead>
+                    <tbody id="today-records">
+                        {% for r in stats.recent_records %}
+                        <tr>
+                            <td>{{ r.employee_name }}</td>
+                            <td>{{ r.check_in | datetime }}</td>
+                            <td>
+                                {% if r.confidence %}
+                                <span class="badge bg-success">{{ "%.1f" | format(r.confidence) }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="text-center py-5 text-muted">
+                    <p>今日暂无打卡记录</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 近7日趋势图 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <span>📈 近7日出勤趋势</span>
+            </div>
+            <div class="card-body">
+                <canvas id="weeklyChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 快捷操作 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <span>⚡ 快捷操作</span>
+            </div>
+            <div class="card-body">
+                <a href="/attendance" class="btn btn-primary me-2">📷 开始打卡</a>
+                <a href="/employees" class="btn btn-success me-2">👤 注册员工</a>
+                <a href="/reports" class="btn btn-info me-2">📊 查看报表</a>
+                <button class="btn btn-warning" onclick="retrainModel()">🎯 重新训练</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 近7日出勤趋势图
+fetch('/api/attendance/daily-counts')
+    .then(r => r.json())
+    .then(data => {
+        const ctx = document.getElementById('weeklyChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.counts.map(c => c.date.slice(5)),
+                datasets: [{
+                    label: '出勤人数',
+                    data: data.counts.map(c => c.count),
+                    backgroundColor: 'rgba(13, 110, 253, 0.6)',
+                    borderColor: 'rgb(13, 110, 253)',
+                    borderWidth: 1,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+    });
+
+function retrainModel() {
+    fetch('/api/train', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            alert(data.success ? '模型训练成功！' : '训练失败: ' + data.detail);
+        })
+        .catch(e => alert('错误: ' + e));
+}
+</script>
+{% endblock %}

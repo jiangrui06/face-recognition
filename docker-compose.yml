@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  face-recognition:
+    build: .
+    container_name: face-recognition
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml
+    # Camera device passthrough (Linux)
+    devices:
+      - /dev/video0:/dev/video0
+    environment:
+      - FACE_SERVER__HOST=0.0.0.0
+      - FACE_SERVER__PORT=8000
+      - FACE_LOGGING__LEVEL=INFO
+    restart: unless-stopped
+    # Increase shared memory for OpenCV
+    shm_size: "256m"

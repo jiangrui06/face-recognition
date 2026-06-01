@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}统计报表 - 人脸识别打卡系统{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2>📈 考勤统计报表</h2>
+        <p class="text-muted">查看和导出考勤统计数据</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">开始日期</label>
+                    <input type="date" class="form-control" id="startDate">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">结束日期</label>
+                    <input type="date" class="form-control" id="endDate">
+                </div>
+                <button class="btn btn-primary w-100" onclick="loadReport()">📊 生成报表</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>📊 汇总</span>
+                <div>
+                    <button class="btn btn-sm btn-outline-success" id="btnExport" onclick="exportCSV()" disabled>
+                        📥 导出 CSV
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="reportSummary" class="row text-center">
+                    <div class="col-4">
+                        <h3 id="reportTotal" class="text-primary">-</h3>
+                        <small class="text-muted">总记录数</small>
+                    </div>
+                    <div class="col-4">
+                        <h3 id="reportEmployees" class="text-success">-</h3>
+                        <small class="text-muted">员工数</small>
+                    </div>
+                    <div class="col-4">
+                        <h3 id="reportAvg" class="text-info">-</h3>
+                        <small class="text-muted">平均天数</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 每日趋势图 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">📈 每日出勤统计</div>
+            <div class="card-body">
+                <canvas id="reportChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 员工出勤明细 -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">👥 员工出勤明细</div>
+            <div class="card-body p-0" style="max-height: 350px; overflow-y: auto;">
+                <table class="table table-sm table-hover mb-0" id="employeeTable">
+                    <thead>
+                        <tr>
+                            <th>员工</th>
+                            <th>出勤天数</th>
+                            <th>出勤率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="employeeTableBody">
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-4">
+                                请先生成报表
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 快速统计 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">📊 快速统计</div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-3">
+                        <h4>{{ stats.total_employees }}</h4>
+                        <small class="text-muted">总员工数</small>
+                    </div>
+                    <div class="col-md-3">
+                        <h4>{{ stats.today_attendance }}</h4>
+                        <small class="text-muted">今日打卡</small>
+                    </div>
+                    <div class="col-md-3">
+                        <h4>{{ stats.today_rate }}%</h4>
+                        <small class="text-muted">今日出勤率</small>
+                    </div>
+                    <div class="col-md-3">
+                        <h4>{{ stats.monthly_attendance }}</h4>
+                        <small class="text-muted">本月打卡</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 默认日期范围：最近7天
+const today = new Date();
+const weekAgo = new Date(today);
+weekAgo.setDate(today.getDate() - 7);
+
+document.getElementById('endDate').value = today.toISOString().split('T')[0];
+document.getElementById('startDate').value = weekAgo.toISOString().split('T')[0];
+
+let currentReport = null;
+
+function loadReport() {
+    const start = document.getElementById('startDate').value;
+    const end = document.getElementById('endDate').value;
+
+    if (!start || !end) {
+        alert('请选择起止日期');
+        return;
+    }
+
+    fetch(`/api/attendance/report?start_date=${start}&end_date=${end}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                alert('加载报表失败');
+                return;
+            }
+            displayReport(data.report);
+        })
+        .catch(e => alert('错误: ' + e));
+}
+
+function displayReport(report) {
+    currentReport = report;
+    document.getElementById('reportTotal').textContent = report.total_records;
+    document.getElementById('reportEmployees').textContent = report.total_employees;
+    const avg = report.total_employees > 0
+        ? (report.total_records / report.total_employees).toFixed(1)
+        : '0';
+    document.getElementById('reportAvg').textContent = avg;
+
+    document.getElementById('btnExport').disabled = false;
+
+    // 图表
+    const ctx = document.getElementById('reportChart').getContext('2d');
+    const dates = Object.keys(report.daily_records).sort();
+    const counts = dates.map(d => report.daily_records[d]);
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates.map(d => d.slice(5)),
+            datasets: [{
+                label: '出勤人数',
+                data: counts,
+                borderColor: 'rgb(13, 110, 253)',
+                backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    // 员工出勤明细
+    const tbody = document.getElementById('employeeTableBody');
+    if (report.employee_records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">暂无记录</td></tr>';
+    } else {
+        const totalDays = dates.length;
+        tbody.innerHTML = report.employee_records.map(e => `
+            <tr>
+                <td><strong>${e.name}</strong></td>
+                <td>${e.days} 天</td>
+                <td>
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar" role="progressbar"
+                             style="width: ${totalDays > 0 ? (e.days / totalDays * 100) : 0}%">
+                            ${totalDays > 0 ? (e.days / totalDays * 100).toFixed(0) : 0}%
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    }
+}
+
+function exportCSV() {
+    const end = document.getElementById('endDate').value;
+    if (!end) return;
+    window.location.href = `/api/attendance/export?date=${end}`;
+}
+</script>
+{% endblock %}

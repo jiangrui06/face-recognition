@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}实时打卡 - 人脸识别打卡系统{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2>📷 实时人脸识别打卡</h2>
+        <p class="text-muted">摄像头实时检测人脸，自动识别并打卡签到</p>
+    </div>
+    <div class="col-auto">
+        <div class="btn-group" role="group">
+            <button id="btnStart" class="btn btn-success" onclick="startCamera()">▶ 开始识别</button>
+            <button id="btnStop" class="btn btn-danger" onclick="stopCamera()" disabled>■ 停止</button>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 视频流 -->
+    <div class="col-md-8 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>📹 摄像头画面</span>
+                <span id="status-badge" class="badge bg-secondary">未启动</span>
+            </div>
+            <div class="card-body p-0 bg-dark text-center position-relative">
+                <img id="videoFeed" src="" class="w-100" style="max-height: 520px; object-fit: contain;"
+                     alt="摄像头画面">
+                <div id="noFeedOverlay" class="position-absolute top-50 start-50 translate-middle text-white">
+                    <h4>摄像头未启动</h4>
+                    <p class="mb-0">点击"开始识别"启动人脸识别</p>
+                </div>
+            </div>
+            <div class="card-footer text-muted small">
+                按 <kbd>ESC</kbd> 停止视频 | 识别在服务端运行
+            </div>
+        </div>
+    </div>
+
+    <!-- 识别事件日志 -->
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>📋 识别记录</span>
+                <span id="event-count" class="badge bg-primary">0</span>
+            </div>
+            <div class="card-body p-0" style="max-height: 560px; overflow-y: auto;">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>姓名</th>
+                            <th>时间</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody id="eventsTable">
+                        <tr id="noEvents">
+                            <td colspan="3" class="text-center text-muted py-4">
+                                暂无识别记录
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 今日打卡记录 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <span>📋 今日打卡记录</span>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-striped mb-0" id="todayRecordsTable">
+                    <thead>
+                        <tr>
+                            <th>姓名</th>
+                            <th>时间</th>
+                            <th>置信度</th>
+                            <th>识别方式</th>
+                        </tr>
+                    </thead>
+                    <tbody id="todayRecordsBody">
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-3">加载中...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer">
+                <button class="btn btn-sm btn-outline-primary" onclick="refreshTodayRecords()">🔄 刷新</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let pollingInterval = null;
+let streamActive = false;
+
+function startCamera() {
+    document.getElementById('btnStart').disabled = true;
+    document.getElementById('btnStop').disabled = false;
+
+    const img = document.getElementById('videoFeed');
+    img.src = '/video_feed?' + new Date().getTime();
+    document.getElementById('noFeedOverlay').style.display = 'none';
+    document.getElementById('status-badge').textContent = '运行中';
+    document.getElementById('status-badge').className = 'badge bg-success';
+
+    streamActive = true;
+
+    if (pollingInterval) clearInterval(pollingInterval);
+    pollingInterval = setInterval(pollEvents, 1000);
+}
+
+function stopCamera() {
+    document.getElementById('btnStart').disabled = false;
+    document.getElementById('btnStop').disabled = true;
+
+    const img = document.getElementById('videoFeed');
+    img.src = '';
+    document.getElementById('noFeedOverlay').style.display = 'block';
+    document.getElementById('status-badge').textContent = '未启动';
+    document.getElementById('status-badge').className = 'badge bg-secondary';
+
+    streamActive = false;
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
+}
+
+function pollEvents() {
+    fetch('/api/events')
+        .then(r => r.json())
+        .then(data => {
+            if (data.events && data.events.length > 0) {
+                data.events.forEach(event => {
+                    addEvent(event);
+                });
+                refreshTodayRecords();
+            }
+        })
+        .catch(() => {});
+}
+
+function addEvent(event) {
+    const tbody = document.getElementById('eventsTable');
+    const noEvents = document.getElementById('noEvents');
+    if (noEvents) noEvents.remove();
+
+    const now = new Date();
+    const time = now.toLocaleTimeString('zh-CN', { hour12: false });
+    const row = document.createElement('tr');
+    row.className = 'event-row';
+    row.innerHTML = `
+        <td><strong>${event.name}</strong></td>
+        <td>${time}</td>
+        <td><span class="badge bg-success">已打卡</span></td>
+    `;
+    tbody.insertBefore(row, tbody.firstChild);
+
+    while (tbody.children.length > 50) {
+        tbody.removeChild(tbody.lastChild);
+    }
+
+    document.getElementById('event-count').textContent = tbody.children.length;
+}
+
+function refreshTodayRecords() {
+    fetch('/api/attendance/today')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('todayRecordsBody');
+            if (!data.records || data.records.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">今日暂无打卡记录</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.records.map(r => `
+                <tr>
+                    <td>${r.name}</td>
+                    <td>${r.time}</td>
+                    <td><span class="badge bg-success">${r.confidence ? r.confidence.toFixed(1) : '-'}</span></td>
+                    <td><code>${r.method}</code></td>
+                </tr>
+            `).join('');
+        });
+}
+
+refreshTodayRecords();
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && streamActive) {
+        stopCamera();
+    }
+});
+</script>
+{% endblock %}
